@@ -1,0 +1,13 @@
+[package]
+authors = ["Zeyla Hellyer <zeyla@hellyer.dev>"]
+edition = "2021"
+homepage = "https://github.com/zeylahellyer/read-gpx"
+name = "read-gpx"
+publish = false
+repository = "https://github.com/zeylahellyer/read-gpx.git"
+version = "0.1.0"
+
+[dependencies]
+gpx = { default-features = false, version = "0.10" }
+time = { default-features = false, features = ["formatting", "local-offset"], version = "0.3" }
+time-tz = { default-features = false, features = ["system"], version = "2" }
