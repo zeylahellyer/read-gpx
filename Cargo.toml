@@ -1,10 +1,10 @@
 [package]
 authors = ["Zeyla Hellyer <zeyla@hellyer.dev>"]
 edition = "2021"
-homepage = "https://github.com/zeylahellyer/read-gpx"
+homepage = "https://github.com/zeylahellyer/read-gpx-cli"
 name = "read-gpx"
 publish = false
-repository = "https://github.com/zeylahellyer/read-gpx.git"
+repository = "https://github.com/zeylahellyer/read-gpx-cli.git"
 version = "0.1.0"
 
 [dependencies]
