@@ -126,7 +126,7 @@ fn read_gpx_file(filepath: &Path) -> Result<Gpx, Box<dyn Error>> {
     // <copyright><author></author></copyright> tags produced by OsmAnd, so we
     // strip those out.
     let contents = fs::read_to_string(filepath)?.replace(
-        "<copyright>\n        <author></author>\n    </copyright>",
+        "<copyright>\n            <author></author>\n        </copyright>",
         "",
     );
     let mut reader = BufReader::new(contents.as_bytes());
