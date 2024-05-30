@@ -72,8 +72,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             let point = most_recent.point();
             println!(
                 "Found point: {latitude}, {longitude}",
-                latitude = point.x(),
-                longitude = point.y(),
+                latitude = point.y(),
+                longitude = point.x(),
             );
             if let Some(time) = most_recent.time {
                 let utc = OffsetDateTime::from(time);
