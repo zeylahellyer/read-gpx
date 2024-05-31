@@ -1,6 +1,7 @@
 mod formatter;
 mod model;
 
+use anyhow::anyhow;
 use model::{Root, Waypoint};
 use std::{
     env,
@@ -30,8 +31,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .flatten()
         .collect::<Vec<Waypoint>>();
     waypoints.sort_by(|a, b| a.time.cmp(&b.time));
-    let from = waypoints.first().unwrap().time;
-    let to = waypoints.last().unwrap().time;
+    let from = waypoints
+        .first()
+        .ok_or_else(|| anyhow!("there are no waypoints in this file"))?
+        .time;
+    let to = waypoints
+        .last()
+        .ok_or_else(|| anyhow!("there are no waypoints in this file"))?
+        .time;
     let timezone = time_tz::system::get_timezone()?;
     let mut stdout = io::stdout().lock();
     writeln!(stdout, "System timezone is {}", timezone.name())?;
@@ -49,15 +56,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
     let mut stdin = io::stdin().lock();
     let mut buffer = String::new();
-    let date = waypoints.first().unwrap().time;
 
     loop {
+        buffer.clear();
         write!(stdout, "> ")?;
         stdout.flush()?;
         stdin.read_line(&mut buffer)?;
-        let (hour, minute, second) = parse_time(&buffer);
-        buffer.clear();
-        let requested = date
+        let (hour, minute, second) = match parse_time(&buffer) {
+            Ok(time) => time,
+            Err(source) => {
+                writeln!(stdout, "{source}")?;
+                continue;
+            }
+        };
+        let requested = from
             .to_timezone(timezone)
             .replace_hour(hour)?
             .replace_minute(minute)?
@@ -111,17 +123,22 @@ pub fn find_most_recent_waypoint<'a>(
     most_recent
 }
 
-fn parse_time(buffer: &str) -> (u8, u8, u8) {
+fn parse_time(buffer: &str) -> anyhow::Result<(u8, u8, u8)> {
     let mut parts = buffer.trim().split(':');
     let hour = parts
         .next()
-        .map_or(0, |part| part.parse().expect("Hour is invalid"));
+        .ok_or_else(|| anyhow!("hour must be provided"))?
+        .parse()
+        .map_err(|_| anyhow!("hour is invalid"))?;
     let minute = parts
         .next()
-        .map_or(0, |part| part.parse().expect("Minute is invalid"));
-    let second = parts
-        .next()
-        .map_or(0, |part| part.parse().expect("Second is invalid"));
+        .ok_or_else(|| anyhow!("minute must be provided"))?
+        .parse()
+        .map_err(|_| anyhow!("minute is invalid"))?;
+    let second = match parts.next() {
+        Some(value) => value.parse().map_err(|_| anyhow!("second is invalid"))?,
+        None => 0,
+    };
 
-    (hour, minute, second)
+    Ok((hour, minute, second))
 }
