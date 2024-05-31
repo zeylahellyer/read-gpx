@@ -65,14 +65,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             .replace_hour(hour)?
             .replace_minute(minute)?
             .replace_second(second)?;
-        let points = find_most_recent_waypoint(&waypoints, requested);
-        if let Some(most_recent) = points {
-            let point = most_recent.point();
+        if let Some(most_recent) = find_most_recent_waypoint(&waypoints, requested) {
             writeln!(
                 stdout,
                 "Found point: {latitude}, {longitude}",
-                latitude = point.y(),
-                longitude = point.x(),
+                latitude = most_recent.point().y(),
+                longitude = most_recent.point().x(),
             )?;
             if let Some(time) = most_recent.time {
                 let utc = OffsetDateTime::from(time);
