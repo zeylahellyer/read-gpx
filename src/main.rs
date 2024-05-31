@@ -21,20 +21,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     let gpx = read_gpx_file(filepath)?;
 
     let (date_format, time_format) = (formatter::date(), formatter::time());
-    let points = gpx
+    let mut waypoints = gpx
         .tracks
         .into_iter()
         .flat_map(|track| track.segments.into_iter().map(|segment| segment.points))
         .flatten()
         .collect::<Vec<Waypoint>>();
-    let from = OffsetDateTime::from(points.first().unwrap().time.unwrap());
-    let to = OffsetDateTime::from(points.last().unwrap().time.unwrap());
+    waypoints.sort_by(|a, b| {
+        let a = OffsetDateTime::from(a.time.unwrap());
+        let b = OffsetDateTime::from(b.time.unwrap());
+
+        a.cmp(&b)
+    });
+    let from = OffsetDateTime::from(waypoints.first().unwrap().time.unwrap());
+    let to = OffsetDateTime::from(waypoints.last().unwrap().time.unwrap());
     let timezone = time_tz::system::get_timezone()?;
     println!("System timezone is {}", timezone.name());
     println!(
-        "Opened {filepath} with {points} points on {day} from {from} to {to}",
+        "Opened {filepath} with {waypoints} points on {day} from {from} to {to}",
         filepath = filepath.display(),
-        points = points.len(),
+        waypoints = waypoints.len(),
         day = from.date().format(&date_format)?,
         from = from.to_timezone(timezone).time().format(&time_format)?,
         to = to.to_timezone(timezone).time().format(&time_format)?,
@@ -45,7 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let stdin = io::stdin();
     let mut stdin = stdin.lock();
     let mut buffer = String::new();
-    let date = OffsetDateTime::from(points.first().unwrap().time.unwrap());
+    let date = OffsetDateTime::from(waypoints.first().unwrap().time.unwrap());
 
     loop {
         print!("> ");
@@ -58,17 +64,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .replace_hour(hour)?
             .replace_minute(minute)?
             .replace_second(second)?;
-        // TODO: This is horribly inefficient, but I wrote a working program in
-        // an hour.
-        let mut points = points.clone();
-        points.retain(|point| OffsetDateTime::from(point.time.unwrap()) < requested);
-        points.sort_by(|a, b| {
-            let a = OffsetDateTime::from(a.time.unwrap());
-            let b = OffsetDateTime::from(b.time.unwrap());
-
-            b.cmp(&a)
-        });
-        if let Some(most_recent) = points.first() {
+        let points = find_most_recent_waypoint(&waypoints, requested);
+        if let Some(most_recent) = points {
             let point = most_recent.point();
             println!(
                 "Found point: {latitude}, {longitude}",
@@ -103,6 +100,29 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("No point found.");
         }
     }
+}
+
+pub fn find_most_recent_waypoint(
+    points: &[Waypoint],
+    requested: OffsetDateTime,
+) -> Option<&Waypoint> {
+    let mut most_recent = None;
+
+    for waypoint in points {
+        let time = if let Some(time) = waypoint.time {
+            OffsetDateTime::from(time)
+        } else {
+            continue;
+        };
+
+        if time > requested {
+            break;
+        }
+
+        most_recent = Some(waypoint);
+    }
+
+    most_recent
 }
 
 fn parse_time(buffer: &str) -> (u8, u8, u8) {
