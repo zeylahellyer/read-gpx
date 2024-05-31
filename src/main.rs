@@ -10,8 +10,7 @@ use std::{
     io::{self, BufRead, Write},
     path::Path,
 };
-use time::OffsetDateTime;
-use time_tz::{OffsetDateTimeExt, TimeZone};
+use time::{OffsetDateTime, UtcOffset};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let Some(provided_path) = env::args().nth(1) else {
@@ -23,7 +22,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let contents = fs::read_to_string(filepath)?;
     let gpx = quick_xml::de::from_str::<Root>(&contents)?;
 
-    let (date_format, time_format) = (formatter::date(), formatter::time());
+    let (date_format, offset_format, time_format) =
+        (formatter::date(), formatter::offset(), formatter::time());
     let mut waypoints = gpx
         .tracks
         .into_iter()
@@ -39,17 +39,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         .last()
         .ok_or_else(|| anyhow!("there are no waypoints in this file"))?
         .time;
-    let timezone = time_tz::system::get_timezone()?;
+    let offset = UtcOffset::current_local_offset()
+        .map_err(|source| anyhow!("system timezone can't be determined: {source}"))?;
     let mut stdout = io::stdout().lock();
-    writeln!(stdout, "System timezone is {}", timezone.name())?;
+    writeln!(
+        stdout,
+        "System timezone is {}",
+        offset.format(&offset_format)?
+    )?;
     writeln!(
         stdout,
         "Opened {filepath} with {waypoints} points on {day} from {from} to {to}",
         filepath = filepath.display(),
         waypoints = waypoints.len(),
         day = from.date().format(&date_format)?,
-        from = from.to_timezone(timezone).time().format(&time_format)?,
-        to = to.to_timezone(timezone).time().format(&time_format)?,
+        from = from.to_offset(offset).time().format(&time_format)?,
+        to = to.to_offset(offset).time().format(&time_format)?,
     )?;
     writeln!(stdout,
         "Enter a time to print information about the most recent track in 24-hour time (eg 14:32:07)."
@@ -70,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         };
         let requested = from
-            .to_timezone(timezone)
+            .to_offset(offset)
             .replace_hour(hour)?
             .replace_minute(minute)?
             .replace_second(second)?;
@@ -81,7 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 latitude = most_recent.latitude(),
                 longitude = most_recent.longitude(),
             )?;
-            let local = most_recent.time.to_timezone(timezone);
+            let local = most_recent.time.to_offset(offset);
             writeln!(
                 stdout,
                 "  Time: {local} / {utc}Z",

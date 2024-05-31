@@ -12,4 +12,3 @@ anyhow = { default-features = false, features = ["std"], version = "1" }
 serde = { default-features = false, features = ["derive"], version = "1" }
 quick-xml = { default-features = false, features = ["serialize"], version = "0.31" }
 time = { default-features = false, features = ["formatting", "local-offset", "parsing", "serde"], version = "0.3" }
-time-tz = { default-features = false, features = ["system"], version = "2" }
