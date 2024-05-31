@@ -1,11 +1,12 @@
 mod formatter;
+mod model;
 
-use gpx::{Gpx, Waypoint};
+use model::{Root, Waypoint};
 use std::{
     env,
     error::Error,
     fs,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, Write},
     path::Path,
 };
 use time::OffsetDateTime;
@@ -18,23 +19,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let filepath = Path::new(&provided_path);
-    let gpx = read_gpx_file(filepath)?;
+    let contents = fs::read_to_string(filepath)?;
+    let gpx = quick_xml::de::from_str::<Root>(&contents)?;
 
     let (date_format, time_format) = (formatter::date(), formatter::time());
     let mut waypoints = gpx
         .tracks
         .into_iter()
-        .flat_map(|track| track.segments.into_iter().map(|segment| segment.points))
+        .flat_map(|track| track.segments.into_iter().map(|segment| segment.waypoints))
         .flatten()
         .collect::<Vec<Waypoint>>();
-    waypoints.sort_by(|a, b| {
-        let a = OffsetDateTime::from(a.time.unwrap());
-        let b = OffsetDateTime::from(b.time.unwrap());
-
-        a.cmp(&b)
-    });
-    let from = OffsetDateTime::from(waypoints.first().unwrap().time.unwrap());
-    let to = OffsetDateTime::from(waypoints.last().unwrap().time.unwrap());
+    waypoints.sort_by(|a, b| a.time.cmp(&b.time));
+    let from = waypoints.first().unwrap().time;
+    let to = waypoints.last().unwrap().time;
     let timezone = time_tz::system::get_timezone()?;
     let mut stdout = io::stdout().lock();
     writeln!(stdout, "System timezone is {}", timezone.name())?;
@@ -52,7 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     )?;
     let mut stdin = io::stdin().lock();
     let mut buffer = String::new();
-    let date = OffsetDateTime::from(waypoints.first().unwrap().time.unwrap());
+    let date = waypoints.first().unwrap().time;
 
     loop {
         write!(stdout, "> ")?;
@@ -69,32 +66,26 @@ fn main() -> Result<(), Box<dyn Error>> {
             writeln!(
                 stdout,
                 "Found point: {latitude}, {longitude}",
-                latitude = most_recent.point().y(),
-                longitude = most_recent.point().x(),
+                latitude = most_recent.latitude(),
+                longitude = most_recent.longitude(),
             )?;
-            if let Some(time) = most_recent.time {
-                let utc = OffsetDateTime::from(time);
-                let local = utc.to_timezone(timezone);
-                writeln!(
-                    stdout,
-                    "  Time: {local} / {utc}Z",
-                    local = local.format(&time_format)?,
-                    utc = utc.format(&time_format)?,
-                )?;
-            }
-            if let Some(name) = most_recent.name.as_deref() {
+            let local = most_recent.time.to_timezone(timezone);
+            writeln!(
+                stdout,
+                "  Time: {local} / {utc}Z",
+                local = local.format(&time_format)?,
+                utc = most_recent.time.format(&time_format)?,
+            )?;
+            if let Some(name) = most_recent.name {
                 writeln!(stdout, "  Name: {name}")?;
             }
-            if let Some(elevation) = most_recent.elevation {
+            if let Some(elevation) = most_recent.elevation() {
                 writeln!(stdout, "  Elevation: {} meters", elevation.round() as u64)?;
             }
-            if let Some(speed) = most_recent.speed {
-                writeln!(stdout, "  Speed: {speed} meters/second")?;
-            }
-            if let Some(description) = most_recent.description.as_deref() {
+            if let Some(description) = most_recent.description {
                 writeln!(stdout, "  Description: {description}")?;
             }
-            if let Some(comment) = most_recent.comment.as_deref() {
+            if let Some(comment) = most_recent.comment {
                 writeln!(stdout, "  Comment: {comment}")?;
             }
         } else {
@@ -103,20 +94,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-pub fn find_most_recent_waypoint(
-    points: &[Waypoint],
+pub fn find_most_recent_waypoint<'a>(
+    points: &'a [Waypoint<'a>],
     requested: OffsetDateTime,
-) -> Option<&Waypoint> {
+) -> Option<&'a Waypoint<'a>> {
     let mut most_recent = None;
 
     for waypoint in points {
-        let time = if let Some(time) = waypoint.time {
-            OffsetDateTime::from(time)
-        } else {
-            continue;
-        };
-
-        if time > requested {
+        if waypoint.time > requested {
             break;
         }
 
@@ -139,17 +124,4 @@ fn parse_time(buffer: &str) -> (u8, u8, u8) {
         .map_or(0, |part| part.parse().expect("Second is invalid"));
 
     (hour, minute, second)
-}
-
-/// Read GPX from a filepath.
-fn read_gpx_file(filepath: &Path) -> Result<Gpx, Box<dyn Error>> {
-    // The gpx crate doesn't support empty
-    // <copyright><author></author></copyright> tags produced by OsmAnd, so we
-    // strip those out.
-    let contents = fs::read_to_string(filepath)?.replace(
-        "<copyright>\n            <author></author>\n        </copyright>",
-        "",
-    );
-    let mut reader = BufReader::new(contents.as_bytes());
-    gpx::read(&mut reader).map_err(Into::into)
 }
