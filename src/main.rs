@@ -36,26 +36,27 @@ fn main() -> Result<(), Box<dyn Error>> {
     let from = OffsetDateTime::from(waypoints.first().unwrap().time.unwrap());
     let to = OffsetDateTime::from(waypoints.last().unwrap().time.unwrap());
     let timezone = time_tz::system::get_timezone()?;
-    println!("System timezone is {}", timezone.name());
-    println!(
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "System timezone is {}", timezone.name())?;
+    writeln!(
+        stdout,
         "Opened {filepath} with {waypoints} points on {day} from {from} to {to}",
         filepath = filepath.display(),
         waypoints = waypoints.len(),
         day = from.date().format(&date_format)?,
         from = from.to_timezone(timezone).time().format(&time_format)?,
         to = to.to_timezone(timezone).time().format(&time_format)?,
-    );
-    println!(
+    )?;
+    writeln!(stdout,
         "Enter a time to print information about the most recent track in 24-hour time (eg 14:32:07)."
-    );
-    let stdin = io::stdin();
-    let mut stdin = stdin.lock();
+    )?;
+    let mut stdin = io::stdin().lock();
     let mut buffer = String::new();
     let date = OffsetDateTime::from(waypoints.first().unwrap().time.unwrap());
 
     loop {
-        print!("> ");
-        io::stdout().flush()?;
+        write!(stdout, "> ")?;
+        stdout.flush()?;
         stdin.read_line(&mut buffer)?;
         let (hour, minute, second) = parse_time(&buffer);
         buffer.clear();
@@ -67,37 +68,39 @@ fn main() -> Result<(), Box<dyn Error>> {
         let points = find_most_recent_waypoint(&waypoints, requested);
         if let Some(most_recent) = points {
             let point = most_recent.point();
-            println!(
+            writeln!(
+                stdout,
                 "Found point: {latitude}, {longitude}",
                 latitude = point.y(),
                 longitude = point.x(),
-            );
+            )?;
             if let Some(time) = most_recent.time {
                 let utc = OffsetDateTime::from(time);
                 let local = utc.to_timezone(timezone);
-                println!(
+                writeln!(
+                    stdout,
                     "  Time: {local} / {utc}Z",
                     local = local.format(&time_format)?,
                     utc = utc.format(&time_format)?,
-                );
+                )?;
             }
             if let Some(name) = most_recent.name.as_deref() {
-                println!("  Name: {name}");
+                writeln!(stdout, "  Name: {name}")?;
             }
             if let Some(elevation) = most_recent.elevation {
-                println!("  Elevation: {} meters", elevation.round() as u64);
+                writeln!(stdout, "  Elevation: {} meters", elevation.round() as u64)?;
             }
             if let Some(speed) = most_recent.speed {
-                println!("  Speed: {speed} meters/second");
+                writeln!(stdout, "  Speed: {speed} meters/second")?;
             }
             if let Some(description) = most_recent.description.as_deref() {
-                println!("  Description: {description}");
+                writeln!(stdout, "  Description: {description}")?;
             }
             if let Some(comment) = most_recent.comment.as_deref() {
-                println!("  Comment: {comment}");
+                writeln!(stdout, "  Comment: {comment}")?;
             }
         } else {
-            println!("No point found.");
+            writeln!(stdout, "No point found.")?;
         }
     }
 }
